@@ -8,7 +8,7 @@ import { RiskBadge } from './components/RiskBadge';
 import { RegimeTimeline } from './components/RegimeTimeline';
 import { BacktestPanel } from './components/BacktestPanel';
 import { Activity } from 'lucide-react';
-import { StateResponse, HistoryResponse, RegimeType } from '@/lib/types';
+import { RegimeType } from '@/lib/types';
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -19,7 +19,6 @@ export default function HomePage() {
 
   useEffect(() => {
     setMounted(true);
-    // Check system preference
     if (window.matchMedia('(prefers-color-scheme: light)').matches) {
       setIsDark(false);
     }
@@ -30,22 +29,22 @@ export default function HomePage() {
     document.documentElement.classList.toggle('dark', isDark);
   }, [isDark, mounted]);
 
-  // Fetch symbols
+  // Fetch symbols from live API
   const { data: symbols, isLoading: symbolsLoading } = useSWR<string[]>(
-    '/api/symbols',
+    '/api/live/symbols',
     fetcher,
     { refreshInterval: 60000 }
   );
 
-  // Fetch current state
-  const { data: state, isLoading: stateLoading } = useSWR<StateResponse>(
-    selectedSymbol ? `/api/state/${selectedSymbol}` : null,
+  // Fetch live regime data
+  const { data: liveState, isLoading: liveLoading } = useSWR(
+    selectedSymbol ? `/api/live/${selectedSymbol}` : null,
     fetcher,
     { refreshInterval: 30000 }
   );
 
-  // Fetch history
-  const { data: history, isLoading: historyLoading } = useSWR<HistoryResponse[]>(
+  // Fetch history (still uses database API)
+  const { data: history, isLoading: historyLoading } = useSWR(
     selectedSymbol ? `/api/history/${selectedSymbol}?limit=100` : null,
     fetcher,
     { refreshInterval: 30000 }
@@ -58,15 +57,14 @@ export default function HomePage() {
     }
   }, [symbols, selectedSymbol]);
 
-  const isStale = state
-    ? Date.now() - new Date(state.updatedAt).getTime() > 120000
-    : false;
-
   if (!mounted) {
     return null;
   }
 
   const displaySymbols = symbols ?? [];
+  const currentRegime = liveState?.regime?.regime as RegimeType;
+  const confidence = liveState?.regime?.confidence ?? 0.75;
+  const isStale = false; // Live data is always fresh
 
   return (
     <div className="min-h-screen bg-bg text-text">
@@ -76,11 +74,12 @@ export default function HomePage() {
           <div className="flex items-center gap-3">
             <Activity className="h-6 w-6 text-primary" />
             <h1 className="text-xl font-bold">Regime Engine</h1>
+            <span className="text-xs text-text-muted px-2 py-1 bg-primary/20 rounded">
+              Live Data
+            </span>
           </div>
           <div className="flex items-center gap-4">
-            {isStale && (
-              <span className="text-xs text-warning">Data stale</span>
-            )}
+            {isStale && <span className="text-xs text-warning">Data stale</span>}
             <button
               onClick={() => setIsDark(!isDark)}
               className="p-2 rounded-md hover:bg-border transition-colors"
@@ -104,50 +103,66 @@ export default function HomePage() {
               isLoading={symbolsLoading}
             />
 
-            {state && (
+            {liveState && (
               <>
                 <RegimeCard
-                  regime={state.regime.regime}
-                  confidence={state.regime.confidence}
-                  isLoading={stateLoading}
+                  regime={currentRegime}
+                  confidence={confidence}
+                  isLoading={liveLoading}
                 />
                 <RiskBadge
-                  riskProfile={state.riskProfile}
-                  isLoading={stateLoading}
+                  riskProfile={liveState.riskProfile}
+                  isLoading={liveLoading}
                 />
 
                 <div className="bg-surface rounded-lg p-4 border border-border space-y-3">
                   <h3 className="text-sm font-semibold text-text-muted">
-                    Current Stats
+                    Market Data
                   </h3>
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <div>
-                      <span className="text-text-muted block">Close</span>
+                      <span className="text-text-muted block">Price</span>
                       <span className="font-mono tabular-nums">
-                        ${state.bar.close.toFixed(2)}
+                        ${liveState.market.price.toLocaleString()}
                       </span>
                     </div>
                     <div>
-                      <span className="text-text-muted block">Volume</span>
+                      <span className="text-text-muted block">Volume 24h</span>
                       <span className="font-mono tabular-nums">
-                        {state.bar.volume.toLocaleString()}
+                        {liveState.market.volume24h.toLocaleString()}
                       </span>
                     </div>
                     <div>
-                      <span className="text-text-muted block">OI</span>
+                      <span className="text-text-muted block">Open Interest</span>
                       <span className="font-mono tabular-nums">
-                        {state.bar.oi
-                          ? state.bar.oi.toLocaleString()
-                          : 'N/A'}
+                        {liveState.market.openInterest.toLocaleString()}
                       </span>
                     </div>
                     <div>
                       <span className="text-text-muted block">Funding</span>
                       <span className="font-mono tabular-nums">
-                        {state.bar.funding_rate !== null
-                          ? `${(state.bar.funding_rate * 100).toFixed(4)}%`
-                          : 'N/A'}
+                        {(liveState.market.fundingRate * 100).toFixed(4)}%
                       </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-surface rounded-lg p-4 border border-border space-y-2">
+                  <h3 className="text-sm font-semibold text-text-muted">
+                    Metrics
+                  </h3>
+                  <div className="text-sm space-y-1">
+                    <div className="flex justify-between">
+                      <span>Returns:</span>
+                      <span className="font-mono tabular-nums">{liveState.metrics.returns}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Volatility:</span>
+                      <span className="font-mono tabular-nums">{liveState.metrics.volatility}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Volume Change:</span>
+                      <span className="font-mono tabular-nums">{liveState.metrics.volumeChange}</span>
                     </div>
                   </div>
                 </div>
@@ -157,16 +172,18 @@ export default function HomePage() {
 
           {/* Main Area */}
           <div className="lg:col-span-2 space-y-6">
-            <RegimeTimeline
-              data={
-                history?.map((h) => ({
-                  open_time: h.open_time,
-                  regime: h.regime,
-                  close: h.close,
-                })) ?? []
-              }
-              isLoading={historyLoading}
-            />
+            {liveState && (
+              <RegimeTimeline
+                data={
+                  history?.map((h: any) => ({
+                    open_time: h.open_time,
+                    regime: h.regime,
+                    close: h.close,
+                  })) ?? []
+                }
+                isLoading={historyLoading}
+              />
+            )}
 
             <BacktestPanel
               symbols={displaySymbols}

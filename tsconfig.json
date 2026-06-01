@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2017",
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -12,23 +16,66 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "react-jsx",
-    "incremental": true,
+    "incremental": false,
     "plugins": [
       {
         "name": "next"
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": [
+        "./*"
+      ]
     }
   },
+  "files": [
+    "next-env.d.ts",
+    "next.config.ts",
+    "instrumentation.ts",
+    "vitest.config.ts",
+    "app/page.tsx",
+    "app/layout.tsx",
+    "app/globals.css",
+    "app/api/backtest/route.ts",
+    "app/api/health/route.ts",
+    "app/api/symbols/route.ts",
+    "app/api/state/[symbol]/route.ts",
+    "app/api/history/[symbol]/route.ts",
+    "app/api/live/[symbol]/route.ts",
+    "app/api/live/symbols/route.ts",
+    "app/components/SymbolSelector.tsx",
+    "app/components/RegimeCard.tsx",
+    "app/components/RegimeTimeline.tsx",
+    "app/components/RiskBadge.tsx",
+    "app/components/BacktestPanel.tsx",
+    "components/ui/button.tsx",
+    "components/ui/card.tsx",
+    "components/ui/badge.tsx",
+    "components/ui/select.tsx",
+    "components/ui/skeleton.tsx",
+    "components/ui/tooltip.tsx",
+    "lib/types.ts",
+    "lib/utils.ts",
+    "lib/config.ts",
+    "lib/db.ts",
+    "lib/exchanges/base.ts",
+    "lib/exchanges/hyperliquid.ts",
+    "lib/features/bars.ts",
+    "lib/features/regimes.ts",
+    "lib/features/risk.ts",
+    "lib/storage/repository.ts",
+    "lib/ingestion/collector.ts",
+    "db/schema.ts"
+  ],
   "include": [
     "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
-    "**/*.mts"
+    "**/*.mts",
+    "**/*.ts",
+    "**/*.tsx"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules"
+  ]
 }
