@@ -2,23 +2,6 @@ import { NextResponse } from 'next/server';
 import { RegimeType } from '@/lib/types';
 import { TREND_RETURN_THRESHOLD, LOW_VOL_THRESHOLD } from '@/lib/config';
 
-interface HyperliquidMeta {
-  asset: string;
-  markPx: string;
-  volume24h: number;
-  openInterest: number;
-  funding: number;
-}
-
-interface HyperliquidCandle {
-  timestamp: number;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-}
-
 // Simple regime classification (pure function)
 function classifyRegime(
   returns: number,
@@ -72,44 +55,68 @@ export async function GET(
     const { symbol } = await params;
     const symbolUpper = symbol.toUpperCase();
 
-    // Fetch current market data from Hyperliquid
-    const metaResponse = await fetch('https://api.hyperliquid.xyz/info', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'meta' }),
-    });
+    // Fetch all market data from Hyperliquid
+    const [metaResponse, allMidsResponse, candlesResponse] = await Promise.all([
+      fetch('https://api.hyperliquid.xyz/info', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'metaAndAssetCtxs' }),
+      }),
+      fetch('https://api.hyperliquid.xyz/info', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'allMids' }),
+      }),
+      fetch('https://api.hyperliquid.xyz/info', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'candleSnapshot',
+          req: { coin: symbolUpper.toLowerCase(), interval: '15m' },
+        }),
+      }),
+    ]);
 
-    if (!metaResponse.ok) {
-      throw new Error('Hyperliquid meta error');
+    if (!metaResponse.ok || !allMidsResponse.ok) {
+      throw new Error('Hyperliquid API error');
     }
 
-    const metaData = await metaResponse.json();
-    const coinData = (metaData as any[]).find((c: any) =>
-      c.asset?.toLowerCase() === symbolUpper.toLowerCase()
-    );
+    const [metaData, allMidsData] = await Promise.all([
+      metaResponse.json(),
+      allMidsResponse.json(),
+    ]);
 
-    if (!coinData) {
+    // Extract universe and asset contexts from metaAndAssetCtxs response
+    // Response is an array: [metaResponse, assetCtxResponse]
+    const metaArray = Array.isArray(metaData) ? metaData[0] : metaData;
+    const ctxArray = Array.isArray(metaData) ? metaData[1] : [];
+
+    const universe = metaArray?.universe || [];
+    const assetCtx = Array.isArray(ctxArray) ? ctxArray : [];
+
+    // Find the coin in universe
+    const coinInfo = universe.find((c: any) => c.name === symbolUpper);
+    if (!coinInfo) {
       return NextResponse.json({ error: 'Symbol not found' }, { status: 404 });
     }
 
-    // Fetch recent candles for regime calculation
-    const candlesResponse = await fetch('https://api.hyperliquid.xyz/info', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        type: 'candleSnapshot',
-        req: { coin: symbolUpper.toLowerCase(), interval: '15m' },
-      }),
-    });
+    // Find the asset context for price/volume data
+    const coinData = assetCtx.find((c: any) =>
+      c?.asset?.toLowerCase() === symbolUpper.toLowerCase()
+    );
+
+    // Parse allMids for current price
+    const price = parseFloat(allMidsData[`${symbolUpper}-USDT`] || allMidsData[symbolUpper] || '0');
 
     let returns = 0;
     let volatility = 0;
     let volumeChange = 0;
 
+    // Parse candle data for regime calculation
     if (candlesResponse.ok) {
       const candles = await candlesResponse.json();
       if (Array.isArray(candles) && candles.length >= 2) {
-        const latest = candles[candles.length - 1];
+        const latest = candles[candles.length - 1]; // [time, open, high, low, close, volume]
         const previous = candles[candles.length - 2];
 
         // Calculate returns
@@ -123,7 +130,7 @@ export async function GET(
 
         // Volume change
         const avgVolume = candles.slice(-20).reduce((sum, c) => sum + c[5], 0) / 20;
-        volumeChange = (candles[candles.length - 1][5] - avgVolume) / avgVolume;
+        volumeChange = avgVolume > 0 ? (candles[candles.length - 1][5] - avgVolume) / avgVolume : 0;
       }
     }
 
@@ -147,10 +154,10 @@ export async function GET(
       },
       riskProfile,
       market: {
-        price: parseFloat(coinData.markPx || '0'),
-        volume24h: coinData.volume24h || 0,
-        openInterest: coinData.openInterest || 0,
-        fundingRate: coinData.funding || 0,
+        price: price || parseFloat(coinData?.markPx || '0'),
+        volume24h: coinData?.volume24h || 0,
+        openInterest: coinData?.openInterest || 0,
+        fundingRate: coinData?.funding || 0,
       },
       metrics: {
         returns: (returns * 100).toFixed(3) + '%',

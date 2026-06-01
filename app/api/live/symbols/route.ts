@@ -5,7 +5,7 @@ export async function GET() {
     const response = await fetch('https://api.hyperliquid.xyz/info', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'meta' }),
+      body: JSON.stringify({ type: 'metaAndAssetCtxs' }),
     });
 
     if (!response.ok) {
@@ -14,12 +14,19 @@ export async function GET() {
 
     const metaData = await response.json();
 
-    // Extract top symbols by volume
-    const symbols = (metaData as any[])
-      .filter((c: any) => c.asset && !c.asset.includes('-'))
-      .sort((a: any, b: any) => (b.volume24h || 0) - (a.volume24h || 0))
-      .slice(0, 20)
-      .map((c: any) => c.asset);
+    // Extract universe from metaAndAssetCtxs response
+    // Response is an array: [metaResponse, assetCtxResponse]
+    const metaArray = Array.isArray(metaData) ? metaData[0] : metaData;
+    const ctxArray = Array.isArray(metaData) ? metaData[1] : [];
+
+    const universe = metaArray?.universe || [];
+    const assetCtx = Array.isArray(ctxArray) ? ctxArray : [];
+
+    // Combine universe with volume data and filter out delisted coins
+    const symbols = universe
+      .filter((c: any) => !c.isDelisted)
+      .map((c: any) => c.name)
+      .slice(0, 20);
 
     return NextResponse.json(symbols);
   } catch (error) {
