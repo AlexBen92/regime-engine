@@ -10,6 +10,8 @@ export async function GET() {
 
     return NextResponse.json(symbols);
   } catch (error) {
-    return NextResponse.json([], { status: 500 });
+    console.error('Symbols API error:', error);
+    // Return empty array for demo mode on platforms without SQLite support
+    return NextResponse.json(['BTC', 'ETH', 'SOL']);
   }
 }

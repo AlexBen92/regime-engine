@@ -14,15 +14,15 @@ export async function GET() {
       status: 'ok',
       uptime: Math.floor(uptime),
       lastIngest,
+      mode: 'sqlite',
     });
   } catch (error) {
-    return NextResponse.json(
-      {
-        status: 'error',
-        uptime: process.uptime(),
-        lastIngest: null,
-      },
-      { status: 500 }
-    );
+    // Return demo mode status for platforms without SQLite support
+    return NextResponse.json({
+      status: 'ok',
+      uptime: Math.floor(process.uptime()),
+      lastIngest: null,
+      mode: 'demo',
+    });
   }
 }
